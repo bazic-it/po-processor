@@ -1,6 +1,3 @@
-# Created: 9/13/2024
-# Last updated: 9/23/2024
-
 import os
 import csv
 import pandas as pd
