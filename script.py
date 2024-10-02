@@ -23,6 +23,7 @@ class Order:
         self.windowEnd = windowEnd
         self.expectedDate = expectedDate
         self.quantityRequested = int(quantityRequested)
+        self.qtyInEach = int((modelNumber).split('-')[-1]) * int(quantityRequested) if '-' in modelNumber else 1
         self.expectedQuantity = int(expectedQuantity)
         self.unitCost = float(unitCost)
         self.currencyCode = currencyCode
@@ -111,36 +112,54 @@ def getOrdersFromInputfile(filepath):
 
     return orders
 
+# -1 : Rejected, 0 : Rejected, Suggested, 1 : Accepted
+def validateOrder(order, sapUnitPrice, sapStock):
+    # check if order price match the agreed upon price
+    if sapUnitPrice > order.unitCost:
+        return -1
+    # check if item is not out of stock
+    elif sapStock < (order.qtyInEach):
+        return -1
+    # check if total price is over or equal to $30
+    elif order.totalPrice < 30:
+        return 0
+    else:
+        return 1
+
 def processAmazonVendorCentralOrders(orders, uomMaster, qtyPriceMaster):
     acceptedOrders = []
     rejectedOrders = []
+    suggestedOrders = []
+
+    
 
     for order in orders:
-        uomCode = ''
+        sapPpP = qtyPriceMaster[order.itemNumber]['p1000'] if order.itemNumber in qtyPriceMaster else 9999999
+        sapUnitPrice = sapPpP * order.qtyInEach
+        sapStock = qtyPriceMaster[order.itemNumber]['qty'] if order.itemNumber in qtyPriceMaster else 0
+        
         if '-' in order.modelNumber:
             if order.modelNumber in uomMaster:
-                modelNumber = uomMaster[order.modelNumber]
-                uomCode = modelNumber.split('-')[-1]
+                order.uomCode = (uomMaster[order.modelNumber]).split('-')[-1]
             else:
-                uomCode = 'EA'
-            order.uomCode = uomCode
+                order.uomCode = 'EA'
 
-            # before appending, check first if quantity and price are valid
-            orderQtyInEach = int((order.modelNumber).split('-')[-1])
-            sapPpP = qtyPriceMaster[order.itemNumber]['p1000'] if qtyPriceMaster[order.itemNumber] else 9999999
-            sapUnitPrice = sapPpP * orderQtyInEach
-            sapStock = qtyPriceMaster[order.itemNumber]['qty'] if qtyPriceMaster[order.itemNumber] else 0
-            if sapUnitPrice > order.unitCost:
+            validation = validateOrder(order, sapUnitPrice, sapStock)
+            if validation == -1:
                 rejectedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, 'Price'])
-            elif sapStock < (order.quantityRequested * orderQtyInEach):
-                rejectedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, 'OOS'])
-            else:
+            elif validation == 0:
+                rejectedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, '< $30'])
+                suggestedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, '< $30'])
+            elif validation == 1:
                 acceptedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice])
+            else:
+                pass
         else:
             rejectedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, 'Invalid SKU'])
-        
+            if validateOrder(order, sapUnitPrice, sapStock) == 0:
+                suggestedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, 'EACH'])
 
-    return acceptedOrders, rejectedOrders
+    return acceptedOrders, rejectedOrders, suggestedOrders
 
 def validateInputFilename(filename):
     cleaned = filename
@@ -192,10 +211,10 @@ def processResult(inputFilepath):
     qtyPriceMasterFilepath = getQtyPriceMasterFilepath()
 
     uomMaster = getUOMMasterData(uomMasterFilepath)
-    qtyPriceMaster, qtyPriceMsg = getInventoryAndPriceMasterData(qtyPriceMasterFilepath)
+    qtyPriceMaster, qtyPriceMsg = getInventoryAndPriceMasterData('./input_sp.xlsx')
     orders = getOrdersFromInputfile(input)
 
-    acceptedOrders, rejectedOrders = processAmazonVendorCentralOrders(orders, uomMaster, qtyPriceMaster)
+    acceptedOrders, rejectedOrders, suggestedOrders = processAmazonVendorCentralOrders(orders, uomMaster, qtyPriceMaster)
 
     if not acceptedOrders:
         response["success"] = False
@@ -214,9 +233,13 @@ def processResult(inputFilepath):
     rejectedDF = pd.DataFrame(rejectedOrders, columns=['PO', 'Item Number', 'Qty', 'Unit Cost', 'UOM', 'Total Price', 'Reason'])
     rejectedDF.index = rejectedDF.index + 1
 
+    suggestedDF = pd.DataFrame(suggestedOrders, columns=['PO', 'Item Number', 'Qty', 'Unit Cost', 'UOM', 'Total Price', 'Reason'])
+    suggestedDF.index = suggestedDF.index + 1
+
     with pd.ExcelWriter(outputFilepath, engine='xlsxwriter') as writer:
         acceptedDF.to_excel(writer, sheet_name='Accepted', startrow=0, startcol=0)
         rejectedDF.to_excel(writer, sheet_name='Rejected', startrow=0, startcol=0)
+        suggestedDF.to_excel(writer, sheet_name='Optional', startrow=0, startcol=0)
 
     response["outputFilename"] = outputFilepath
     writeLog(timestamp, response)
