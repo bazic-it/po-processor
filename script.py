@@ -61,7 +61,30 @@ def getUOMMasterData(inputFilepath):
     return mapped
 
 def getInventoryAndPriceMasterData(inputFilepath):
-    pass
+    age = getDaysDifferent(getCurrentime(), getFileModifiedDate(inputFilepath))
+    message = 'Inventory master file was updated {} days ago.'.format(age)
+
+    mapped = {}
+
+    try:
+        workbook = openpyxl.load_workbook(inputFilepath) # #, Item No., Item Desc., Available Qty
+        sheet = workbook.active
+        for r in range(2, sheet.max_row+1):
+            itemNumber = None
+            for c in range(1, sheet.max_column+1):
+                data = sheet.cell(row=r, column=c).value
+                if c == 2: # item number
+                    itemNumber = str(data)
+                    mapped[itemNumber] = {}
+                if c == 4: # stock
+                    mapped[itemNumber]["qty"] = data
+                if c == 8: # P1000
+                    mapped[itemNumber]["p1000"] = data
+    except:
+        print('*** Error: Failed to read input file for Inventory Master. Please make sure filename is valid. ***')
+        return {}, message
+
+    return mapped, message
 
 def getOrdersFromInputfile(filepath):
     orders = []
@@ -88,9 +111,10 @@ def getOrdersFromInputfile(filepath):
 
     return orders
 
-def processAmazonVendorCentralOrders(orders, uomMaster):
+def processAmazonVendorCentralOrders(orders, uomMaster, qtyPriceMaster):
     acceptedOrders = []
     rejectedOrders = []
+
     for order in orders:
         uomCode = ''
         if '-' in order.modelNumber:
@@ -100,9 +124,20 @@ def processAmazonVendorCentralOrders(orders, uomMaster):
             else:
                 uomCode = 'EA'
             order.uomCode = uomCode
-            acceptedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice])
+
+            # before appending, check first if quantity and price are valid
+            orderQtyInEach = int((order.modelNumber).split('-')[-1])
+            sapPpP = qtyPriceMaster[order.itemNumber]['p1000'] if qtyPriceMaster[order.itemNumber] else 9999999
+            sapUnitPrice = sapPpP * orderQtyInEach
+            sapStock = qtyPriceMaster[order.itemNumber]['qty'] if qtyPriceMaster[order.itemNumber] else 0
+            if sapUnitPrice > order.unitCost:
+                rejectedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, 'Price'])
+            elif sapStock < (order.quantityRequested * orderQtyInEach):
+                rejectedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, 'OOS'])
+            else:
+                acceptedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice])
         else:
-            rejectedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice])
+            rejectedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, 'Invalid SKU'])
         
 
     return acceptedOrders, rejectedOrders
@@ -120,14 +155,17 @@ def validateInputFilename(filename):
 def getUOMMasterFilepath():
     return os.path.join(ASSETS_BASE_DIR, UOM_MASTER_FILENAME)
 
-# def writeLog(timestamp, status):
-#     path = os.path.join(ASSETS_BASE_DIR, LOGS_FILENAME)
-#     user = os.getenv('COMPUTERNAME')
-#     try:
-#         with open(path, 'a') as file:
-#             file.write('USR;{} | IN;{} | SUCCESS;{} | ERR;{} | WARNING;{} | WARN;{} | OOS;{} | OUT;{} | TS;{}\n'.format(user, status["inputFilename"], status["success"], status["errorMessage"], status["warning"], status["warningMessage"], status["outOfStockSKUs"], status["outputFilename"], timestamp))
-#     except:
-#         print('*** Error: Failed to write to logs. ***')
+def getQtyPriceMasterFilepath():
+    return os.path.join(ASSETS_BASE_DIR, QTY_PRICE_MASTER_FILENAME)
+
+def writeLog(timestamp, status):
+    path = os.path.join(ASSETS_BASE_DIR, LOGS_FILENAME)
+    user = os.getenv('COMPUTERNAME')
+    try:
+        with open(path, 'a') as file:
+            file.write('USR;{} | IN;{} | SUCCESS;{} | ERR;{} | WARNING;{} | WARN;{} | OUT;{} | VER;{} | TS;{}\n'.format(user, status["inputFilename"], status["success"], status["errorMessage"], status["warning"], status["warningMessage"], status["outputFilename"], APP_VERSION, timestamp))
+    except:
+        print('*** Error: Failed to write to logs. ***')
 
 def sortOrders(a, b):
     if a[4] == 'CASE' and (b[4] == 'BOX' or b[4] == 'EA'):
@@ -144,20 +182,25 @@ def processResult(inputFilepath):
     response = {
         "success": True,
         "errorMessage": "",
-        "inputFilename": "",
-        "outputFilename": ""
+        "inputFilename": inputFilepath,
+        "outputFilename": "",
+        "warning": None,
+        "warningMessage": None,
     }
 
     uomMasterFilepath = getUOMMasterFilepath()
+    qtyPriceMasterFilepath = getQtyPriceMasterFilepath()
 
     uomMaster = getUOMMasterData(uomMasterFilepath)
+    qtyPriceMaster, qtyPriceMsg = getInventoryAndPriceMasterData(qtyPriceMasterFilepath)
     orders = getOrdersFromInputfile(input)
 
-    acceptedOrders, rejectedOrders = processAmazonVendorCentralOrders(orders, uomMaster)
+    acceptedOrders, rejectedOrders = processAmazonVendorCentralOrders(orders, uomMaster, qtyPriceMaster)
 
     if not acceptedOrders:
         response["success"] = False
         response["errorMessage"] = "Please try again or contact admin."
+        writeLog(timestamp, response)
         return response
 
     acceptedOrders.sort(key=cmp_to_key(sortOrders))
@@ -168,7 +211,7 @@ def processResult(inputFilepath):
     acceptedDF = pd.DataFrame(acceptedOrders, columns=['PO', 'Item Number', 'Qty', 'Unit Cost', 'UOM', 'Total Price'])
     acceptedDF.index = acceptedDF.index + 1
 
-    rejectedDF = pd.DataFrame(rejectedOrders, columns=['PO', 'Item Number', 'Qty', 'Unit Cost', 'UOM', 'Total Price'])
+    rejectedDF = pd.DataFrame(rejectedOrders, columns=['PO', 'Item Number', 'Qty', 'Unit Cost', 'UOM', 'Total Price', 'Reason'])
     rejectedDF.index = rejectedDF.index + 1
 
     with pd.ExcelWriter(outputFilepath, engine='xlsxwriter') as writer:
@@ -176,5 +219,6 @@ def processResult(inputFilepath):
         rejectedDF.to_excel(writer, sheet_name='Rejected', startrow=0, startcol=0)
 
     response["outputFilename"] = outputFilepath
+    writeLog(timestamp, response)
 
     return response
