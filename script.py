@@ -222,7 +222,7 @@ def processResult(inputFilepath):
 
     acceptedOrders.sort(key=cmp_to_key(sortOrders))
 
-    outputFilename = 'batch_output_{}.xlsx'.format(timestamp)
+    outputFilename = 'po_output_{}.xlsx'.format(timestamp)
     outputFilepath = OUTPUT_DIR + outputFilename
 
     acceptedDF = pd.DataFrame(acceptedOrders, columns=['PO', 'Item Number', 'Qty', 'Unit Cost', 'UOM', 'Total Price', 'SAP Unit Cost'])
