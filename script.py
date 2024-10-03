@@ -131,8 +131,6 @@ def processAmazonVendorCentralOrders(orders, uomMaster, qtyPriceMaster):
     rejectedOrders = []
     suggestedOrders = []
 
-    
-
     for order in orders:
         sapPpP = qtyPriceMaster[order.itemNumber]['p1000'] if order.itemNumber in qtyPriceMaster else 9999999
         sapUnitPrice = sapPpP * order.qtyInEach
@@ -146,18 +144,18 @@ def processAmazonVendorCentralOrders(orders, uomMaster, qtyPriceMaster):
 
             validation = validateOrder(order, sapUnitPrice, sapStock)
             if validation == -1:
-                rejectedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, 'Price'])
+                rejectedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, sapUnitPrice, 'Price'])
             elif validation == 0:
-                rejectedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, '< $30'])
-                suggestedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, '< $30'])
+                rejectedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, sapUnitPrice, '< $30'])
+                suggestedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, sapUnitPrice, '< $30'])
             elif validation == 1:
-                acceptedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice])
+                acceptedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, sapUnitPrice])
             else:
                 pass
         else:
-            rejectedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, 'Invalid SKU'])
+            rejectedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, sapUnitPrice, 'Invalid SKU'])
             if validateOrder(order, sapUnitPrice, sapStock) == 0:
-                suggestedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, 'EACH'])
+                suggestedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, sapUnitPrice, 'EACH'])
 
     return acceptedOrders, rejectedOrders, suggestedOrders
 
@@ -211,7 +209,7 @@ def processResult(inputFilepath):
     qtyPriceMasterFilepath = getQtyPriceMasterFilepath()
 
     uomMaster = getUOMMasterData(uomMasterFilepath)
-    qtyPriceMaster, qtyPriceMsg = getInventoryAndPriceMasterData('./input_sp.xlsx')
+    qtyPriceMaster, qtyPriceMsg = getInventoryAndPriceMasterData(qtyPriceMasterFilepath)
     orders = getOrdersFromInputfile(input)
 
     acceptedOrders, rejectedOrders, suggestedOrders = processAmazonVendorCentralOrders(orders, uomMaster, qtyPriceMaster)
@@ -227,13 +225,13 @@ def processResult(inputFilepath):
     outputFilename = 'batch_output_{}.xlsx'.format(timestamp)
     outputFilepath = OUTPUT_DIR + outputFilename
 
-    acceptedDF = pd.DataFrame(acceptedOrders, columns=['PO', 'Item Number', 'Qty', 'Unit Cost', 'UOM', 'Total Price'])
+    acceptedDF = pd.DataFrame(acceptedOrders, columns=['PO', 'Item Number', 'Qty', 'Unit Cost', 'UOM', 'Total Price', 'SAP Unit Cost'])
     acceptedDF.index = acceptedDF.index + 1
 
-    rejectedDF = pd.DataFrame(rejectedOrders, columns=['PO', 'Item Number', 'Qty', 'Unit Cost', 'UOM', 'Total Price', 'Reason'])
+    rejectedDF = pd.DataFrame(rejectedOrders, columns=['PO', 'Item Number', 'Qty', 'Unit Cost', 'UOM', 'Total Price', 'SAP Unit Cost', 'Reason'])
     rejectedDF.index = rejectedDF.index + 1
 
-    suggestedDF = pd.DataFrame(suggestedOrders, columns=['PO', 'Item Number', 'Qty', 'Unit Cost', 'UOM', 'Total Price', 'Reason'])
+    suggestedDF = pd.DataFrame(suggestedOrders, columns=['PO', 'Item Number', 'Qty', 'Unit Cost', 'UOM', 'Total Price', 'SAP Unit Cost', 'Reason'])
     suggestedDF.index = suggestedDF.index + 1
 
     with pd.ExcelWriter(outputFilepath, engine='xlsxwriter') as writer:
