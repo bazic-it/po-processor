@@ -149,7 +149,8 @@ def processAmazonVendorCentralOrders(orders, uomMaster, qtyPriceMaster):
                 rejectedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, sapUnitPrice, '< $30'])
                 suggestedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, sapUnitPrice, '< $30'])
             elif validation == 1:
-                acceptedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, sapUnitPrice])
+                pricePerPiece = order.totalPrice / order.qtyInEach
+                acceptedOrders.append([order.itemNumber, '', order.uomCode, order.quantityRequested, pricePerPiece, '', '', order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, sapUnitPrice])
             else:
                 pass
         else:
@@ -225,7 +226,7 @@ def processResult(inputFilepath):
     outputFilename = 'po_output_{}.xlsx'.format(timestamp)
     outputFilepath = OUTPUT_DIR + outputFilename
 
-    acceptedDF = pd.DataFrame(acceptedOrders, columns=['PO', 'Item Number', 'Qty', 'Unit Cost', 'UOM', 'Total Price', 'SAP Unit Cost'])
+    acceptedDF = pd.DataFrame(acceptedOrders, columns=['SKU', 'Desc', 'UOM', 'QTY', 'PpP', '', '', 'PO', 'Item Number', 'Qty', 'Unit Cost', 'UOM', 'Total Price', 'SAP Unit Cost']) # columns=['PO', 'Item Number', 'Qty', 'Unit Cost', 'UOM', 'Total Price', 'SAP Unit Cost']
     acceptedDF.index = acceptedDF.index + 1
 
     rejectedDF = pd.DataFrame(rejectedOrders, columns=['PO', 'Item Number', 'Qty', 'Unit Cost', 'UOM', 'Total Price', 'SAP Unit Cost', 'Reason'])
