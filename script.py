@@ -8,6 +8,7 @@ from config import *
 
 class Order:
     def __init__(self, PO, vendor, shipToLocation, ASIN, externalId, externalIdType, modelNumber, title, availability, windowType, windowStart, windowEnd, expectedDate, quantityRequested, expectedQuantity, unitCost, currencyCode):
+        qty = 1 if modelNumber.split('-')[-1] == 'EACH' else int((modelNumber).split('-')[-1])
         self.PO = PO
         self.vendor = vendor
         self.shipToLocation = shipToLocation
@@ -15,7 +16,7 @@ class Order:
         self.externalId = externalId
         self.externalIdType = externalIdType
         self.modelNumber = modelNumber
-        self.itemNumber = self.modelNumber.split('-')[0]
+        self.itemNumber = None
         self.title = title
         self.availability = availability
         self.windowType = windowType
@@ -23,7 +24,7 @@ class Order:
         self.windowEnd = windowEnd
         self.expectedDate = expectedDate
         self.quantityRequested = int(quantityRequested)
-        self.qtyInEach = int((modelNumber).split('-')[-1]) * int(quantityRequested) if '-' in modelNumber else 1
+        self.qtyInEach = qty * int(quantityRequested) if '-' in modelNumber else 1
         self.expectedQuantity = int(expectedQuantity)
         self.unitCost = float(unitCost)
         self.currencyCode = currencyCode
@@ -54,7 +55,11 @@ def getUOMMasterData(inputFilepath):
             content = csv.reader(file)
             for line in content:
                 if (len(line) == 3):
-                    mapped['{}-{}'.format(line[1], line[2])] = line[0]
+                    mapped['{}-{}'.format(line[1], line[2])] = {
+                        "modelNumber": line[0],
+                        "sku": line[1],
+                        "uomQty": line[2]
+                    }
     except:
         print('*** Error: Failed to read input file for UOM Master. Please make sure filename is valid. ***')
         return {}
@@ -121,8 +126,8 @@ def validateOrder(order, sapUnitPrice, sapStock):
     elif sapStock < (order.qtyInEach):
         return -1
     # check if total price is over or equal to $30
-    elif order.totalPrice < 30:
-        return 0
+    # elif order.totalPrice < 30:
+    #     return 0
     else:
         return 1
 
@@ -132,22 +137,29 @@ def processAmazonVendorCentralOrders(orders, uomMaster, qtyPriceMaster):
     suggestedOrders = []
 
     for order in orders:
-        sapPpP = qtyPriceMaster[order.itemNumber]['p1000'] if order.itemNumber in qtyPriceMaster else 9999999
+        modelNumberKey = order.modelNumber.replace("EACH", "1")
+        order.itemNumber = order.modelNumber if '-' not in order.modelNumber else (uomMaster[modelNumberKey]["sku"] if modelNumberKey in uomMaster else None)
+
+        if not order.itemNumber in qtyPriceMaster:
+            rejectedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, 0, 'Not in SAP'])
+            continue
+
+        sapPpP = qtyPriceMaster[order.itemNumber]['p1000'] if order.itemNumber in qtyPriceMaster else 0
         sapUnitPrice = sapPpP * order.qtyInEach
         sapStock = qtyPriceMaster[order.itemNumber]['qty'] if order.itemNumber in qtyPriceMaster else 0
-        
+
         if '-' in order.modelNumber:
             if order.modelNumber in uomMaster:
-                order.uomCode = (uomMaster[order.modelNumber]).split('-')[-1]
+                order.uomCode = (uomMaster[order.modelNumber]["modelNumber"]).split('-')[-1]
             else:
                 order.uomCode = 'EA'
 
             validation = validateOrder(order, sapUnitPrice, sapStock)
             if validation == -1:
                 rejectedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, sapUnitPrice, 'Price'])
-            elif validation == 0:
-                rejectedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, sapUnitPrice, '< $30'])
-                suggestedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, sapUnitPrice, '< $30'])
+            # elif validation == 0:
+            #     rejectedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, sapUnitPrice, '< $30'])
+            #     suggestedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, sapUnitPrice, '< $30'])
             elif validation == 1:
                 pricePerPiece = order.totalPrice / order.qtyInEach
                 acceptedOrders.append([order.itemNumber, '', order.uomCode, order.quantityRequested, pricePerPiece, '', '', order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, sapUnitPrice])
@@ -157,7 +169,7 @@ def processAmazonVendorCentralOrders(orders, uomMaster, qtyPriceMaster):
             rejectedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, sapUnitPrice, 'Invalid SKU'])
             if validateOrder(order, sapUnitPrice, sapStock) == 0:
                 suggestedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, sapUnitPrice, 'EACH'])
-
+    
     return acceptedOrders, rejectedOrders, suggestedOrders
 
 def validateInputFilename(filename):
@@ -214,8 +226,8 @@ def processResult(inputFilepath):
     orders = getOrdersFromInputfile(input)
 
     acceptedOrders, rejectedOrders, suggestedOrders = processAmazonVendorCentralOrders(orders, uomMaster, qtyPriceMaster)
-
-    if not acceptedOrders:
+   
+    if not acceptedOrders and not rejectedOrders:
         response["success"] = False
         response["errorMessage"] = "Please try again or contact admin."
         writeLog(timestamp, response)
