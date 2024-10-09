@@ -232,6 +232,13 @@ def processResult(inputFilepath):
         response["errorMessage"] = "Please try again or contact admin."
         writeLog(timestamp, response)
         return response
+    
+    poIsLessThan30 = False
+    totalPOPrice = 0
+    for order in acceptedOrders:
+        totalPOPrice += order[12]
+    if totalPOPrice < PO_ACCEPTED_TOTAL_PRICE:
+        poIsLessThan30 = True
 
     acceptedOrders.sort(key=cmp_to_key(sortOrders))
 
@@ -248,9 +255,13 @@ def processResult(inputFilepath):
     suggestedDF.index = suggestedDF.index + 1
 
     with pd.ExcelWriter(outputFilepath, engine='xlsxwriter') as writer:
-        acceptedDF.to_excel(writer, sheet_name='Accepted', startrow=0, startcol=0)
-        rejectedDF.to_excel(writer, sheet_name='Rejected', startrow=0, startcol=0)
-        suggestedDF.to_excel(writer, sheet_name='Optional', startrow=0, startcol=0)
+        acceptedDF.to_excel(writer, sheet_name='Accepted', startrow=2, startcol=0)
+        rejectedDF.to_excel(writer, sheet_name='Rejected', startrow=2, startcol=0)
+        suggestedDF.to_excel(writer, sheet_name='Optional', startrow=2, startcol=0)
+
+        if poIsLessThan30:
+            worksheet = writer.sheets['Accepted']
+            worksheet.write(0, 0, "Note: PO is less than $30.")
 
     response["outputFilename"] = outputFilepath
     writeLog(timestamp, response)
