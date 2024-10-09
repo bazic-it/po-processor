@@ -145,7 +145,7 @@ def processAmazonVendorCentralOrders(orders, uomMaster, qtyPriceMaster):
             continue
 
         sapPpP = qtyPriceMaster[order.itemNumber]['p1000'] if order.itemNumber in qtyPriceMaster else 0
-        sapUnitPrice = sapPpP * order.qtyInEach
+        sapUnitPrice = (sapPpP * order.qtyInEach) / order.quantityRequested
         sapStock = qtyPriceMaster[order.itemNumber]['qty'] if order.itemNumber in qtyPriceMaster else 0
 
         if '-' in order.modelNumber:
