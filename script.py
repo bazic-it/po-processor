@@ -233,12 +233,9 @@ def processResult(inputFilepath):
         writeLog(timestamp, response)
         return response
     
-    poIsLessThan30 = False
     totalPOPrice = 0
     for order in acceptedOrders:
         totalPOPrice += order[12]
-    if totalPOPrice < PO_ACCEPTED_TOTAL_PRICE:
-        poIsLessThan30 = True
 
     acceptedOrders.sort(key=cmp_to_key(sortOrders))
 
@@ -259,9 +256,8 @@ def processResult(inputFilepath):
         rejectedDF.to_excel(writer, sheet_name='Rejected', startrow=2, startcol=0)
         suggestedDF.to_excel(writer, sheet_name='Optional', startrow=2, startcol=0)
 
-        if poIsLessThan30:
-            worksheet = writer.sheets['Accepted']
-            worksheet.write(0, 0, "Note: PO is less than $30.")
+        worksheet = writer.sheets['Accepted']
+        worksheet.write(0, 0, "Total PO Price: ${:.2f}".format(totalPOPrice))
 
     response["outputFilename"] = outputFilepath
     writeLog(timestamp, response)

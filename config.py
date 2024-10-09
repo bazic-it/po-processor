@@ -9,5 +9,3 @@ QTY_PRICE_MASTER_FILENAME = 'Available Qty Whse 01 + Price Levels.xlsx'
 LOGS_FILENAME = 'logs_avc.txt'
 USER_DOWNLOADS = str(Path.home() / "Downloads") + '/'
 OUTPUT_DIR = './avc_outputs/'
-
-PO_ACCEPTED_TOTAL_PRICE = 30
