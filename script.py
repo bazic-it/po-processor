@@ -168,7 +168,7 @@ def processAmazonVendorCentralOrders(orders, uomMaster, qtyPriceMaster):
             else:
                 pass
         else:
-            rejectedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, sapUnitPrice, 'Invalid SKU'])
+            rejectedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, 0, 'Invalid SKU'])
             if validateOrder(order, sapUnitPrice, sapStock) == 0:
                 suggestedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, sapUnitPrice, 'EACH'])
     
@@ -246,13 +246,13 @@ def processResult(inputFilepath):
     outputFilename = 'po_output_{}.xlsx'.format(timestamp)
     outputFilepath = OUTPUT_DIR + outputFilename
 
-    acceptedDF = pd.DataFrame(acceptedOrders, columns=['SKU', 'Desc', 'UOM', 'QTY', 'PpP', '', '', 'PO', 'Item Number', 'Qty', 'Unit Cost', 'UOM', 'Total Price', 'SAP Unit Cost']) # columns=['PO', 'Item Number', 'Qty', 'Unit Cost', 'UOM', 'Total Price', 'SAP Unit Cost']
+    acceptedDF = pd.DataFrame(acceptedOrders, columns=['SKU', 'Desc', 'UOM', 'QTY', 'PpP', '', '', 'PO', 'Item Number', 'Qty', 'Amazon Price', 'UOM', 'Total Price', 'Bazic Price']) # columns=['PO', 'Item Number', 'Qty', 'Unit Cost', 'UOM', 'Total Price', 'SAP Unit Cost']
     acceptedDF.index = acceptedDF.index + 1
 
-    rejectedDF = pd.DataFrame(rejectedOrders, columns=['PO', 'Item Number', 'Qty', 'Unit Cost', 'UOM', 'Total Price', 'SAP Unit Cost', 'Reason'])
+    rejectedDF = pd.DataFrame(rejectedOrders, columns=['PO', 'Item Number', 'Qty', 'Amazon Price', 'UOM', 'Total Price', 'Bazic Price', 'Reason'])
     rejectedDF.index = rejectedDF.index + 1
 
-    suggestedDF = pd.DataFrame(suggestedOrders, columns=['PO', 'Item Number', 'Qty', 'Unit Cost', 'UOM', 'Total Price', 'SAP Unit Cost', 'Reason'])
+    suggestedDF = pd.DataFrame(suggestedOrders, columns=['PO', 'Item Number', 'Qty', 'Amazon Price', 'UOM', 'Total Price', 'Bazic Price', 'Reason'])
     suggestedDF.index = suggestedDF.index + 1
 
     with pd.ExcelWriter(outputFilepath, engine='xlsxwriter') as writer:
