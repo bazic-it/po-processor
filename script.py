@@ -137,9 +137,11 @@ def processAmazonVendorCentralOrders(orders, uomMaster, qtyPriceMaster):
     suggestedOrders = []
 
     for order in orders:
-        modelNumberKey = order.modelNumber.replace("EACH", "1")
-        order.itemNumber = order.modelNumber if '-' not in order.modelNumber else (uomMaster[modelNumberKey]["sku"] if modelNumberKey in uomMaster else None)
+        if '-EACH' in order.modelNumber:
+            rejectedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, 0, 'EACH'])
+            continue
 
+        order.itemNumber = order.modelNumber if '-' not in order.modelNumber else (uomMaster[order.modelNumber]["sku"] if order.modelNumber in uomMaster else None)
         if not order.itemNumber in qtyPriceMaster:
             rejectedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, 0, 'Not in SAP'])
             continue
