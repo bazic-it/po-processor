@@ -240,6 +240,8 @@ def processResult(inputFilepath):
         totalPOPrice += order[12]
 
     acceptedOrders.sort(key=cmp_to_key(sortOrders))
+    rejectedOrders.sort(key=cmp_to_key(sortOrders))
+    suggestedOrders.sort(key=cmp_to_key(sortOrders))
 
     outputFilename = 'po_output_{}.xlsx'.format(timestamp)
     outputFilepath = OUTPUT_DIR + outputFilename
