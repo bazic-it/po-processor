@@ -137,8 +137,13 @@ def processAmazonVendorCentralOrders(orders, uomMaster, qtyPriceMaster):
     suggestedOrders = []
 
     for order in orders:
-        if '-EACH' in order.modelNumber:
-            rejectedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, 0, 'EACH'])
+        if order.modelNumber in uomMaster:
+            order.uomCode = (uomMaster[order.modelNumber]["modelNumber"]).split('-')[-1]
+        else:
+            order.uomCode = 'EA'
+
+        if '-' not in order.modelNumber or '-EACH' in order.modelNumber:
+            rejectedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, 0, 'Invalid SKU'])
             continue
 
         order.itemNumber = order.modelNumber if '-' not in order.modelNumber else (uomMaster[order.modelNumber]["sku"] if order.modelNumber in uomMaster else None)
@@ -150,27 +155,17 @@ def processAmazonVendorCentralOrders(orders, uomMaster, qtyPriceMaster):
         sapUnitPrice = (sapPpP * order.qtyInEach) / order.quantityRequested
         sapStock = qtyPriceMaster[order.itemNumber]['qty'] if order.itemNumber in qtyPriceMaster else 0
 
-        if '-' in order.modelNumber:
-            if order.modelNumber in uomMaster:
-                order.uomCode = (uomMaster[order.modelNumber]["modelNumber"]).split('-')[-1]
-            else:
-                order.uomCode = 'EA'
-
-            validation = validateOrder(order, sapUnitPrice, sapStock)
-            if validation == -1:
-                rejectedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, sapUnitPrice, 'Price'])
-            # elif validation == 0:
-            #     rejectedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, sapUnitPrice, '< $30'])
-            #     suggestedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, sapUnitPrice, '< $30'])
-            elif validation == 1:
-                pricePerPiece = order.totalPrice / order.qtyInEach
-                acceptedOrders.append([order.itemNumber, '', order.uomCode, order.quantityRequested, pricePerPiece, '', '', order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, sapUnitPrice])
-            else:
-                pass
+        validation = validateOrder(order, sapUnitPrice, sapStock)
+        if validation == -1:
+            rejectedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, sapUnitPrice, 'Price'])
+        # elif validation == 0:
+        #     rejectedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, sapUnitPrice, '< $30'])
+        #     suggestedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, sapUnitPrice, '< $30'])
+        elif validation == 1:
+            pricePerPiece = order.totalPrice / order.qtyInEach
+            acceptedOrders.append([order.itemNumber, '', order.uomCode, order.quantityRequested, pricePerPiece, '', '', order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, sapUnitPrice])
         else:
-            rejectedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, 0, 'Invalid SKU'])
-            if validateOrder(order, sapUnitPrice, sapStock) == 0:
-                suggestedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, sapUnitPrice, 'EACH'])
+            pass
     
     return acceptedOrders, rejectedOrders, suggestedOrders
 
@@ -200,12 +195,28 @@ def writeLog(timestamp, status):
         print('*** Error: Failed to write to logs. ***')
 
 def sortOrders(a, b):
-    if a[4] == 'CASE' and (b[4] == 'BOX' or b[4] == 'EA'):
+    if a[4] == 'CASE' and (b[4] == 'BOX' or b[4] == 'EA' or b[4] == None):
         return -1
-    elif a[4] == 'BOX' and b[4] == 'EA':
+    elif a[4] == 'BOX' and (b[4] == 'EA' or b[4] == None):
         return -1
     else:
         return 1
+    
+def sortOrdersForAccepted(a, b):
+    if a[2] == 'CASE' and (b[2] == 'BOX' or b[2] == 'EA' or b[2] == None):
+        return -1
+    elif a[2] == 'BOX' and (b[2] == 'EA' or b[2] == None):
+        return -1
+    else:
+        return 1
+    
+# def sortOrdersForRejectedAndSuggested(a, b):
+#     if a[4] == 'CASE' and (b[4] == 'BOX' or b[4] == 'EA'):
+#         return -1
+#     elif a[4] == 'BOX' and b[4] == 'EA':
+#         return -1
+#     else:
+#         return 1
 
 def processResult(inputFilepath):
     input = validateInputFilename(inputFilepath)
@@ -239,7 +250,7 @@ def processResult(inputFilepath):
     for order in acceptedOrders:
         totalPOPrice += order[12]
 
-    acceptedOrders.sort(key=cmp_to_key(sortOrders))
+    acceptedOrders.sort(key=cmp_to_key(sortOrdersForAccepted))
     rejectedOrders.sort(key=cmp_to_key(sortOrders))
     suggestedOrders.sort(key=cmp_to_key(sortOrders))
 
