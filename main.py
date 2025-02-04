@@ -47,12 +47,14 @@ class App:
         self.statusMessage.config(text="")
 
     def processCommand(self):
-        self.statusMessage.config(text="Processing...")
         self.clearMessages()
 
         inputFilename = self.inputField.get()
 
         if len(inputFilename) != 0:
+            self.statusMessage.config(text="Processing...")
+            self.root.update()
+            
             response = processResult(inputFilename)
 
             if response["success"]:

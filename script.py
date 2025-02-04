@@ -66,6 +66,42 @@ def getUOMMasterData(inputFilepath):
 
     return mapped
 
+def getUOMMasterDataWithExcelFormat(inputFilepath):
+    mapped = {}
+    message = None
+    
+    try:
+        age = getDaysDifferent(getCurrentime(), getFileModifiedDate(inputFilepath))
+        message = 'UOM master file was updated {} days ago.'.format(age)
+
+        workbook = openpyxl.load_workbook(inputFilepath)
+        sheet = workbook.active
+        for r in range(2, sheet.max_row+1):
+            modelNumber = None
+            sku = None
+            uomQty = None
+
+            for c in range(1, sheet.max_column+1):
+                data = sheet.cell(row=r, column=c).value
+                if c == 1:
+                    modelNumber = str(data)
+                if c == 2:
+                    sku = str(data)
+                if c == 3:
+                    uomQty = int(data)
+
+                if (modelNumber and sku and uomQty):
+                    mapped['{}-{}'.format(sku, uomQty)] = {
+                        "modelNumber": modelNumber,
+                        "sku": sku,
+                        "uomQty": uomQty
+                    }
+    except:
+        print('*** Error: Failed to read input file for UOM Master. Please make sure filename is valid. ***')
+        return {}, message
+    # print(mapped)
+    return mapped, message
+
 def getInventoryAndPriceMasterData(inputFilepath):
     age = getDaysDifferent(getCurrentime(), getFileModifiedDate(inputFilepath))
     message = 'Inventory master file was updated {} days ago.'.format(age)
@@ -147,6 +183,7 @@ def processAmazonVendorCentralOrders(orders, uomMaster, qtyPriceMaster):
             continue
 
         order.itemNumber = order.modelNumber if '-' not in order.modelNumber else (uomMaster[order.modelNumber]["sku"] if order.modelNumber in uomMaster else None)
+ 
         if not order.itemNumber in qtyPriceMaster:
             rejectedOrders.append([order.PO, order.modelNumber, order.quantityRequested, order.unitCost, order.uomCode, order.totalPrice, 0, 'Not in SAP'])
             continue
@@ -234,7 +271,7 @@ def processResult(inputFilepath):
     uomMasterFilepath = getUOMMasterFilepath()
     qtyPriceMasterFilepath = getQtyPriceMasterFilepath()
 
-    uomMaster = getUOMMasterData(uomMasterFilepath)
+    uomMaster, uomMasterMsg = getUOMMasterDataWithExcelFormat(uomMasterFilepath)
     qtyPriceMaster, qtyPriceMsg = getInventoryAndPriceMasterData(qtyPriceMasterFilepath)
     orders = getOrdersFromInputfile(input)
 
