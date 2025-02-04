@@ -1,0 +1,9 @@
+{
+    "assets_base_directory": "S:/ECOM-CC-WHS/master_files",
+    "uom_master_filename": "uom_input.xlsx",
+    "inventory_master_filename": "Available Qty Whse 01 + Price Levels.xlsx",
+    "logs_filename": "logs_avc.txt",
+    "local_logs_filepath": "",
+    "input_file_location": "Downloads",
+    "output_file_location": "./avc_outputs/"
+}
