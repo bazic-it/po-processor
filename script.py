@@ -156,7 +156,7 @@ def getOrdersFromInputfile(filepath):
 # -1 : Rejected, 0 : Rejected, Suggested, 1 : Accepted
 def validateOrder(order, sapUnitPrice, sapStock):
     # check if order price match the agreed upon price
-    if sapUnitPrice > order.unitCost:
+    if round(sapUnitPrice, 2) > round(order.unitCost, 2):
         return -1
     # check if item is not out of stock
     elif sapStock < (order.qtyInEach):
